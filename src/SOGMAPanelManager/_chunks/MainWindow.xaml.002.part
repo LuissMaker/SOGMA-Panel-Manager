@@ -1,0 +1,190 @@
+                                   Text="Ninguno"
+                                   Margin="0,8,0,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   FontSize="12"/>
+                        <TextBlock x:Name="ImageInfoText"
+                                   Margin="0,8,0,0"
+                                   Foreground="#CFCFCF"
+                                   FontSize="12"/>
+
+                        <Separator Margin="0,16" Background="#3A3A3A"/>
+
+                        <TextBlock Text="Escala del panel"
+                                   Foreground="{StaticResource TextBrush}"
+                                   FontSize="15" FontWeight="SemiBold"/>
+
+                        <Grid Margin="0,7,0,2">
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock x:Name="ScaleText" Text="100%" Foreground="#F2F2F2"
+                                       FontSize="22" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Column="1" Text="zoom" Foreground="{StaticResource MutedTextBrush}"
+                                       FontSize="11" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
+                        </Grid>
+
+                        <Slider x:Name="ScaleSlider" Style="{x:Null}" Minimum="10" Maximum="400" Value="100"
+                                TickFrequency="5" SmallChange="5" LargeChange="25" IsSnapToTickEnabled="False"
+                                ValueChanged="ScaleSlider_ValueChanged"/>
+
+                        <Expander Margin="0,7,0,0" Foreground="{StaticResource MutedTextBrush}">
+                            <Expander.Header><TextBlock Text="⚙  Opciones de escala" FontSize="12"/></Expander.Header>
+                            <StackPanel Margin="3,7,0,0">
+                                <CheckBox x:Name="EnableWheelScaleCheck" Content="Escalar con la rueda del mouse"
+                                          IsChecked="True" Style="{StaticResource ToggleSwitchStyle}"/>
+                                <CheckBox x:Name="InheritScaleCheck" Content="Heredar escala al avanzar" IsChecked="True"
+                                          Style="{StaticResource ToggleSwitchStyle}" Margin="0,7,0,0"/>
+                            </StackPanel>
+                        </Expander>
+
+                        <Grid Margin="0,9,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="7"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="→  Aplicar al siguiente" Padding="7,6" FontSize="11" Click="ApplyToNext_Click"/>
+                            <Button Grid.Column="2" Content="↺  100%" Padding="7,6" FontSize="11" Click="ResetScale_Click"/>
+                        </Grid>
+
+                        <Separator Margin="0,14" Background="#3A3A3A"/>
+
+                        <TextBlock Text="Referencia anterior" Foreground="{StaticResource TextBrush}"
+                                   FontSize="15" FontWeight="SemiBold"/>
+                        <CheckBox x:Name="ShowPreviousReferenceCheck" Content="Mostrar referencia" IsChecked="True"
+                                  Style="{StaticResource ToggleSwitchStyle}" Margin="0,9,0,0"
+                                  Checked="PreviousReferenceOption_Changed" Unchecked="PreviousReferenceOption_Changed"/>
+
+                        <StackPanel Margin="0,8,0,0"
+                                    Visibility="{Binding IsChecked, ElementName=ShowPreviousReferenceCheck, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox x:Name="SolidReferenceCheck" Content="Color plano" IsChecked="True"
+                                          Style="{StaticResource ToggleSwitchStyle}"
+                                          Checked="PreviousReferenceOption_Changed" Unchecked="PreviousReferenceOption_Changed"/>
+                                <CheckBox x:Name="GlowReferenceCheck" Content="Glow" IsChecked="False" Margin="13,0,0,0"
+                                          Style="{StaticResource ToggleSwitchStyle}"
+                                          Checked="PreviousReferenceOption_Changed" Unchecked="PreviousReferenceOption_Changed"
+                                          ToolTip="Dibuja una línea luminosa con el tamaño del panel anterior."/>
+                            </StackPanel>
+                            <Grid Margin="0,9,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="40"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="Opacidad" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                                <TextBlock x:Name="ReferenceOpacityText" Grid.Column="1" Text="28%" HorizontalAlignment="Right"
+                                           Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                            </Grid>
+                            <Slider x:Name="ReferenceOpacitySlider" Style="{x:Null}" Minimum="5" Maximum="70" Value="28"
+                                    TickFrequency="5" SmallChange="1" LargeChange="5"
+                                    ValueChanged="ReferenceOpacitySlider_ValueChanged"/>
+                        </StackPanel>
+
+                        <Separator Margin="0,14" Background="#3A3A3A"/>
+
+                        <TextBlock Text="Guías y límites" Foreground="{StaticResource TextBrush}"
+                                   FontSize="15" FontWeight="SemiBold"/>
+                        <CheckBox x:Name="ShowCenterGuidesCheck" Content="Guías centrales" IsChecked="True"
+                                  Style="{StaticResource ToggleSwitchStyle}" Margin="0,9,0,0"
+                                  Checked="CanvasGuideOption_Changed" Unchecked="CanvasGuideOption_Changed"/>
+                        <CheckBox x:Name="ShowSafeAreaCheck" Content="Zona segura" IsChecked="True"
+                                  Style="{StaticResource ToggleSwitchStyle}" Margin="0,7,0,0"
+                                  Checked="CanvasGuideOption_Changed" Unchecked="CanvasGuideOption_Changed"/>
+                        <CheckBox x:Name="ShowCanvasLimitsCheck" Content="Límite real 1920 × 1080" IsChecked="True"
+                                  Style="{StaticResource ToggleSwitchStyle}" Margin="0,7,0,0"
+                                  Checked="CanvasGuideOption_Changed" Unchecked="CanvasGuideOption_Changed"/>
+                        <CheckBox x:Name="ShowOuterFrameCheck" Content="Marco exterior auxiliar" IsChecked="False"
+                                  Style="{StaticResource ToggleSwitchStyle}" Margin="0,7,0,0"
+                                  Checked="CanvasGuideOption_Changed" Unchecked="CanvasGuideOption_Changed"/>
+                        <CheckBox x:Name="ShowInnerFrameCheck" Content="Marco interior auxiliar" IsChecked="False"
+                                  Style="{StaticResource ToggleSwitchStyle}" Margin="0,7,0,0"
+                                  Checked="CanvasGuideOption_Changed" Unchecked="CanvasGuideOption_Changed"/>
+
+                        <Separator Margin="0,14" Background="#3A3A3A"/>
+
+                        <TextBlock Text="Exportación PNG" Foreground="{StaticResource TextBrush}"
+                                   FontSize="15" FontWeight="SemiBold"/>
+                        <TextBlock Text="1920 × 1080 · Transparente · Centrado" Margin="0,5,0,0"
+                                   Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                        <CheckBox x:Name="ExportAdjustedOnlyCheck" Content="Sólo paneles ajustados" IsChecked="False"
+                                  Style="{StaticResource ToggleSwitchStyle}" Margin="0,9,0,0"/>
+                        <CheckBox x:Name="ExportNewOrModifiedOnlyCheck" Content="Sólo nuevos o modificados" IsChecked="False"
+                                  Style="{StaticResource ToggleSwitchStyle}" Margin="0,7,0,0"
+                                  ToolTip="Omite archivos ya exportados que sean más recientes que el panel y sus ajustes."/>
+
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="7"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="Exportar actual" Padding="7,7" FontSize="11" Click="ExportCurrent_Click"/>
+                            <Button Grid.Column="2" Content="Exportar todos" Padding="7,7" FontSize="11" Click="ExportAll_Click"/>
+                        </Grid>
+
+                        <Separator Margin="0,14" Background="#3A3A3A"/>
+                        <Expander Foreground="{StaticResource TextBrush}">
+                            <Expander.Header><TextBlock Text="⌨  Atajos" FontSize="14" FontWeight="SemiBold"/></Expander.Header>
+                            <StackPanel Margin="3,7,0,0">
+                                <TextBlock Text="← / →  Anterior / siguiente&#x0a;↑ / ↓  Aumentar / reducir zoom&#x0a;Home / End  Primero / último&#x0a;Enter  Confirmar y avanzar&#x0a;G  Referencia&#x0a;C  Color plano&#x0a;D  Glow&#x0a;Ctrl + E  Exportar actual&#x0a;Ctrl + Shift + E  Exportar todos&#x0a;0  Restablecer"
+                                           TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                                <TextBlock Text="Rueda 5% · Ctrl 1% · Shift 0.25%" Margin="0,7,0,0"
+                                           Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <Border Grid.Column="2"
+                    Background="{StaticResource WorkspaceDotsBrush}"
+                    BorderBrush="{StaticResource BorderBrushDark}"
+                    BorderThickness="1"
+                    CornerRadius="7"
+                    Padding="24">
+                <Viewbox Stretch="Uniform"
+                         StretchDirection="Both"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center">
+                    <Grid Width="960"
+                          Height="540"
+                          Background="#101114"
+                          MouseWheel="Canvas_MouseWheel"
+                          Focusable="True"
+                          x:Name="CanvasHost">
+
+                        <Border x:Name="WorkspaceOuterFrame" BorderBrush="#555B64"
+                                BorderThickness="1" Background="Transparent" Visibility="Collapsed"/>
+
+                        <Grid Margin="24"
+                              Background="#090A0C"
+                              ClipToBounds="True">
+                            <Border x:Name="WorkspaceInnerFrame" BorderBrush="#737B87"
+                                    BorderThickness="1" Background="Transparent" Visibility="Collapsed"/>
+
+                            <Grid x:Name="PanelViewport"
+                                  Margin="0"
+                                  ClipToBounds="True"
+                                  SizeChanged="PanelViewport_SizeChanged">
+                                <TextBlock x:Name="CanvasPlaceholder"
+                                           Text="Canvas 1920 × 1080&#x0a;&#x0a;Abre una carpeta para cargar los paneles"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           TextAlignment="Center"
+                                           Foreground="#AFAFAF"
+                                           FontSize="18"
+                                           FontWeight="SemiBold"/>
+
+                                <!-- Referencia del panel anterior: modo imagen -->
+                                <Image x:Name="PreviousImage"
+                                       Margin="18"
+                                       Stretch="Uniform"
+                                       HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"
+                                       IsHitTestVisible="False"
+                                       Visibility="Collapsed"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       RenderTransformOrigin="0.5,0.5">
+                                    <Image.RenderTransform>
+                                        <ScaleTransform x:Name="PreviousImageScaleTransform"
+                                                        ScaleX="1"
+                                                        ScaleY="1"/>
+                                    </Image.RenderTransform>
+                                </Image>
+
+                                <!-- Referencia del panel anterior: silueta de color plano -->
+                                <Border x:Name="PreviousSolidReference"
+                                        Margin="18"
+                                        Background="#FF4D6D"
+                                        IsHitTestVisible="False"
+                                        Visibility="Collapsed"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Border.RenderTransform>

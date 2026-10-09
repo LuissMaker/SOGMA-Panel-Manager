@@ -1,0 +1,299 @@
+using Microsoft.Win32;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.IO.Compression;
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+
+namespace SOGMAPanelManager;
+
+public partial class MainWindow : Window
+{
+    private static readonly HashSet<string> SupportedExtensions =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"
+        };
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true
+    };
+
+    private static readonly Color[] ReferenceColors =
+    {
+        Color.FromRgb(255, 77, 109),
+        Color.FromRgb(58, 134, 255),
+        Color.FromRgb(6, 214, 160),
+        Color.FromRgb(255, 190, 11),
+        Color.FromRgb(131, 56, 236),
+        Color.FromRgb(255, 127, 17),
+        Color.FromRgb(0, 187, 249),
+        Color.FromRgb(241, 91, 181)
+    };
+
+    private readonly ObservableCollection<ImageItem> _items = new();
+    private bool _updatingScaleControls;
+    private bool _loadingProjectSettings;
+    private bool _isDirty;
+    private string? _currentProjectPath;
+    private string? _temporaryProjectFolder;
+    private BitmapSource? _previousReferenceBitmap;
+    private Brush? _activeReferenceBrush;
+    private bool _syncingThumbnailScroll;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        ThumbnailList.ItemsSource = _items;
+        Loaded += MainWindow_Loaded;
+        SizeChanged += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(UpdateThumbnailScrollBar));
+        _items.CollectionChanged += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(UpdateThumbnailScrollBar));
+        UpdateWindowTitle();
+    }
+
+    private void NewProject_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ConfirmDiscardChanges())
+            return;
+
+        CleanupTemporaryProjectFolder();
+        ResetWorkspace();
+        _currentProjectPath = null;
+
+        _loadingProjectSettings = true;
+        try
+        {
+            EnableWheelScaleCheck.IsChecked = true;
+            InheritScaleCheck.IsChecked = true;
+            ShowPreviousReferenceCheck.IsChecked = true;
+            SolidReferenceCheck.IsChecked = true;
+            GlowReferenceCheck.IsChecked = false;
+            ReferenceOpacitySlider.Value = 28;
+            ShowCenterGuidesCheck.IsChecked = true;
+            ShowSafeAreaCheck.IsChecked = true;
+            ShowCanvasLimitsCheck.IsChecked = true;
+            ShowOuterFrameCheck.IsChecked = false;
+            ShowInnerFrameCheck.IsChecked = false;
+        }
+        finally
+        {
+            _loadingProjectSettings = false;
+        }
+
+        FolderPathText.Text = "Nuevo proyecto vacío";
+        StatusText.Text = "Nuevo proyecto listo. Abre una carpeta para cargar paneles.";
+        _isDirty = false;
+        UpdateWindowTitle();
+    }
+
+    private void ExportCurrent_Click(object sender, RoutedEventArgs e)
+    {
+        if (ThumbnailList.SelectedItem is not ImageItem item)
+        {
+            MessageBox.Show(
+                "No hay ningún panel seleccionado.",
+                "SOGMA Panel Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        if (ExportAdjustedOnlyCheck.IsChecked == true && !item.IsAdjusted)
+        {
+            MessageBox.Show(
+                "El panel seleccionado todavía no está marcado como ajustado.",
+                "SOGMA Panel Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Seleccionar carpeta para exportar el panel",
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try
+        {
+            bool onlyNewOrModified = ExportNewOrModifiedOnlyCheck.IsChecked == true;
+            string outputPath = onlyNewOrModified
+                ? GetCanonicalExportPath(dialog.FolderName, item)
+                : GetExportPath(dialog.FolderName, item);
+
+            if (onlyNewOrModified && !ShouldExportItem(item, outputPath))
+            {
+                StatusText.Text = $"Sin cambios: {Path.GetFileName(outputPath)}";
+                MessageBox.Show(
+                    "El panel ya estaba exportado y no tiene cambios nuevos.",
+                    "SOGMA Panel Manager",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            ExportPanelToPng(item, outputPath);
+            WritePremiereNotesSidecar(dialog.FolderName, new[] { item });
+
+            StatusText.Text = $"Panel exportado: {Path.GetFileName(outputPath)}";
+
+            MessageBox.Show(
+                $"Panel exportado correctamente.\n\n{outputPath}",
+                "SOGMA Panel Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ShowError("No se pudo exportar el panel.", ex);
+        }
+    }
+
+    private void ExportAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (_items.Count == 0)
+        {
+            MessageBox.Show(
+                "No hay paneles para exportar.",
+                "SOGMA Panel Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        List<ImageItem> exportItems = ExportAdjustedOnlyCheck.IsChecked == true
+            ? _items.Where(item => item.IsAdjusted).ToList()
+            : _items.ToList();
+
+        if (exportItems.Count == 0)
+        {
+            MessageBox.Show(
+                "No hay paneles ajustados para exportar.",
+                "SOGMA Panel Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Seleccionar carpeta para exportar los paneles",
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try
+        {
+            int exported = 0;
+            int skipped = 0;
+            bool onlyNewOrModified = ExportNewOrModifiedOnlyCheck.IsChecked == true;
+
+            for (int i = 0; i < exportItems.Count; i++)
+            {
+                ImageItem item = exportItems[i];
+                StatusText.Text = $"Revisando {i + 1} de {exportItems.Count}: {item.FileName}";
+                Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
+
+                string outputPath = onlyNewOrModified
+                    ? GetCanonicalExportPath(dialog.FolderName, item)
+                    : GetExportPath(dialog.FolderName, item);
+
+                if (onlyNewOrModified && !ShouldExportItem(item, outputPath))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                StatusText.Text = $"Exportando {i + 1} de {exportItems.Count}: {item.FileName}";
+                Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
+                ExportPanelToPng(item, outputPath);
+                exported++;
+            }
+
+            WritePremiereNotesSidecar(dialog.FolderName, exportItems);
+
+            StatusText.Text = onlyNewOrModified
+                ? $"{exported} exportado(s) · {skipped} sin cambios."
+                : $"{exported} panel(es) exportado(s) en PNG.";
+
+            MessageBox.Show(
+                onlyNewOrModified
+                    ? $"Exportación terminada.\n\nNuevos o modificados: {exported}\nSin cambios: {skipped}\n\n{dialog.FolderName}"
+                    : $"{exported} panel(es) exportado(s) correctamente.\n\n{dialog.FolderName}",
+                "SOGMA Panel Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ShowError("No se pudieron exportar todos los paneles.", ex);
+        }
+    }
+
+    private static void ExportPanelToPng(ImageItem item, string outputPath)
+    {
+        const int canvasWidth = 1920;
+        const int canvasHeight = 1080;
+
+        BitmapSource bitmap = ImageEffects.Apply(LoadBitmap(item.FilePath), item.EditRegions);
+
+        double fitScale = Math.Min(
+            canvasWidth / (double)Math.Max(1, bitmap.PixelWidth),
+            canvasHeight / (double)Math.Max(1, bitmap.PixelHeight));
+
+        double finalScale = fitScale * item.Scale;
+        double drawWidth = bitmap.PixelWidth * finalScale;
+        double drawHeight = bitmap.PixelHeight * finalScale;
+
+        double left = (canvasWidth - drawWidth) / 2.0;
+        double top = (canvasHeight - drawHeight) / 2.0;
+
+        var visual = new DrawingVisual();
+
+        using (DrawingContext context = visual.RenderOpen())
+        {
+            context.DrawImage(
+                bitmap,
+                new Rect(left, top, drawWidth, drawHeight));
+        }
+
+        var renderBitmap = new RenderTargetBitmap(
+            canvasWidth,
+            canvasHeight,
+            96,
+            96,
+            PixelFormats.Pbgra32);
+
+        renderBitmap.Render(visual);
+        renderBitmap.Freeze();
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(renderBitmap));
+
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+
+        using var stream = new FileStream(
+            outputPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None);
+
+        encoder.Save(stream);
+    }
+
+    private static string GetCanonicalExportPath(string folder, ImageItem item)

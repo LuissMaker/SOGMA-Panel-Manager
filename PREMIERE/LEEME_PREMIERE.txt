@@ -1,0 +1,12 @@
+SOGMA / Premiere
+
+Esta carpeta contiene prototipos de integración con Premiere Pro.
+
+La versión actual de SOGMA Panel Manager no necesita este plugin para el flujo de etiquetas:
+al exportar un panel con una nota, el nombre queda como:
+
+0025_Capa-26__[ANIMACION].png
+
+Si escribes un emoji en la nota, se conserva. SOGMA no agrega emojis por su cuenta.
+
+El puente UXP incluido es experimental y puede requerir una versión de Premiere/API diferente según la función usada.

@@ -1,0 +1,299 @@
+            {
+                FormatVersion = 4,
+                ProjectName = Path.GetFileNameWithoutExtension(destination),
+                SavedAtUtc = DateTime.UtcNow,
+                SelectedIndex = Math.Max(0, ThumbnailList.SelectedIndex),
+                EnableWheelScale = EnableWheelScaleCheck.IsChecked == true,
+                InheritScale = InheritScaleCheck.IsChecked == true,
+                ShowPreviousReference = ShowPreviousReferenceCheck.IsChecked == true,
+                SolidReference = SolidReferenceCheck.IsChecked == true,
+                OutlineOnly = false,
+                GlowReference = GlowReferenceCheck.IsChecked == true,
+                ReferenceOpacity = ReferenceOpacitySlider.Value,
+                ShowCenterGuides = ShowCenterGuidesCheck.IsChecked == true,
+                ShowSafeArea = ShowSafeAreaCheck.IsChecked == true,
+                ShowCanvasLimits = ShowCanvasLimitsCheck.IsChecked == true,
+                ShowOuterFrame = ShowOuterFrameCheck.IsChecked == true,
+                ShowInnerFrame = ShowInnerFrameCheck.IsChecked == true
+            };
+
+            using (var archive = ZipFile.Open(temporaryArchive, ZipArchiveMode.Create))
+            {
+                for (int i = 0; i < _items.Count; i++)
+                {
+                    ImageItem item = _items[i];
+                    string extension = Path.GetExtension(item.FileName);
+                    string archivePath = $"images/{i + 1:D5}{extension.ToLowerInvariant()}";
+
+                    archive.CreateEntryFromFile(
+                        item.FilePath,
+                        archivePath,
+                        CompressionLevel.NoCompression);
+
+                    project.Images.Add(new SogmaProjectImage
+                    {
+                        FileName = item.FileName,
+                        ArchivePath = archivePath,
+                        Scale = item.Scale,
+                        IsAdjusted = item.IsAdjusted,
+                        LastModifiedUtc = item.LastModifiedUtc,
+                        PremiereNote = item.PremiereNote,
+                        EditRegions = item.EditRegions.Select(r => r.Clone()).ToList()
+                    });
+                }
+
+                var manifest = archive.CreateEntry("project.json", CompressionLevel.Optimal);
+                using var stream = manifest.Open();
+                JsonSerializer.Serialize(stream, project, JsonOptions);
+            }
+
+            File.Move(temporaryArchive, destination, overwrite: true);
+            WriteProjectPremiereSidecar(destination);
+
+            _currentProjectPath = destination;
+            FolderPathText.Text = destination;
+            _isDirty = false;
+            UpdateWindowTitle();
+
+            StatusText.Text =
+                $"Proyecto guardado con {_items.Count} imagen(es): {Path.GetFileName(destination)}";
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                if (File.Exists(temporaryArchive))
+                    File.Delete(temporaryArchive);
+            }
+            catch { }
+
+            ShowError("No se pudo guardar el proyecto.", ex);
+        }
+    }
+
+    private bool ConfirmDiscardChanges()
+    {
+        bool hasUnsavedWork = _items.Count > 0 && (_isDirty || _currentProjectPath is null);
+        if (!hasUnsavedWork)
+            return true;
+
+        MessageBoxResult result = MessageBox.Show(
+            "Hay trabajo sin guardar en el proyecto actual.\n\n¿Deseas guardarlo antes de continuar?",
+            "SOGMA Panel Manager",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Warning);
+
+        if (result == MessageBoxResult.Cancel)
+            return false;
+
+        if (result == MessageBoxResult.Yes)
+        {
+            SaveProject(saveAs: _currentProjectPath is null);
+            return !_isDirty;
+        }
+
+        return true;
+    }
+
+    private void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        if (!ConfirmDiscardChanges())
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        CleanupTemporaryProjectFolder();
+    }
+
+    private void ResetWorkspace()
+    {
+        _items.Clear();
+        MainImage.Source = null;
+        PreviousImage.Source = null;
+        PreviousImage.Visibility = Visibility.Collapsed;
+        PreviousSolidReference.Visibility = Visibility.Collapsed;
+        GlowOverlay.Visibility = Visibility.Collapsed;
+        PreviousGlowReference.Visibility = Visibility.Collapsed;
+        _previousReferenceBitmap = null;
+        CanvasPlaceholder.Visibility = Visibility.Visible;
+        SelectedFileText.Text = "Ninguno";
+        ImageInfoText.Text = "";
+        FolderPathText.Text = "Ninguna carpeta o proyecto seleccionado";
+        SetScaleControls(1.0);
+        _isDirty = false;
+    }
+
+    private void TryAddImage(
+        string filePath,
+        double scale,
+        bool isAdjusted,
+        DateTime? lastModifiedUtc = null,
+        string premiereNote = "",
+        IEnumerable<PanelEditRegion>? editRegions = null)
+    {
+        try
+        {
+            DateTime sourceModifiedUtc = File.GetLastWriteTimeUtc(filePath);
+            var item = new ImageItem
+            {
+                FilePath = filePath,
+                FileName = Path.GetFileName(filePath),
+                Thumbnail = LoadBitmap(filePath, 260),
+                Scale = scale,
+                IsAdjusted = isAdjusted,
+                PremiereNote = premiereNote ?? "",
+                LastModifiedUtc = lastModifiedUtc ?? sourceModifiedUtc
+            };
+
+            if (editRegions is not null)
+                item.EditRegions.AddRange(editRegions.Select(r => r.Clone()));
+
+            if (item.EditRegions.Count > 0)
+            {
+                item.Thumbnail = BuildThumbnail(item);
+                item.NotifyEditsChanged();
+                if (lastModifiedUtc.HasValue)
+                    item.LastModifiedUtc = lastModifiedUtc.Value;
+            }
+
+            _items.Add(item);
+        }
+        catch
+        {
+        }
+    }
+
+    private void ThumbnailList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ThumbnailList.SelectedItem is not ImageItem item)
+            return;
+
+        try
+        {
+            var sourceBitmap = LoadBitmap(item.FilePath);
+            var bitmap = ImageEffects.Apply(sourceBitmap, item.EditRegions);
+            MainImage.Source = bitmap;
+            CanvasPlaceholder.Visibility = Visibility.Collapsed;
+            SelectedFileText.Text = item.FileName;
+            ImageInfoText.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight} px";
+            ApplyScale(item.Scale);
+            UpdatePreviousReference();
+            EnsureSelectedThumbnailVisible(center: true);
+
+            StatusText.Text =
+                $"Mostrando {ThumbnailList.SelectedIndex + 1} de {_items.Count}: {item.FileName}";
+        }
+        catch (Exception ex)
+        {
+            ShowError($"No se pudo abrir la imagen {item.FileName}.", ex);
+        }
+    }
+
+    private void Canvas_MouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (EnableWheelScaleCheck.IsChecked != true)
+            return;
+
+        if (ThumbnailList.SelectedItem is not ImageItem item)
+            return;
+
+        double step = 0.05;
+
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            step = 0.0025;
+        else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            step = 0.01;
+
+        SetItemScale(item, item.Scale + (e.Delta > 0 ? step : -step), markAdjusted: true);
+        e.Handled = true;
+    }
+
+    private void ScaleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!IsLoaded || _updatingScaleControls || ThumbnailList is null)
+            return;
+
+        if (ThumbnailList.SelectedItem is ImageItem item)
+            SetItemScale(item, e.NewValue / 100.0, markAdjusted: true, updateSlider: false);
+    }
+
+    private void ApplyToNext_Click(object sender, RoutedEventArgs e)
+    {
+        if (ThumbnailList.SelectedItem is not ImageItem current)
+            return;
+
+        int nextIndex = ThumbnailList.SelectedIndex + 1;
+        if (nextIndex >= _items.Count)
+        {
+            StatusText.Text = "Ya estás en el último panel.";
+            return;
+        }
+
+        current.IsAdjusted = true;
+
+        ImageItem next = _items[nextIndex];
+        next.Scale = current.Scale;
+        next.IsAdjusted = true;
+        MarkDirty();
+
+        ThumbnailList.SelectedIndex = nextIndex;
+        EnsureSelectedThumbnailVisible(center: true);
+
+        StatusText.Text = $"Escala {current.Scale * 100:0.##}% aplicada al siguiente panel.";
+    }
+
+    private void ResetScale_Click(object sender, RoutedEventArgs e)
+    {
+        if (ThumbnailList.SelectedItem is ImageItem item)
+            SetItemScale(item, 1.0, markAdjusted: true);
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        bool control = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+
+        if (control && e.Key == Key.E)
+        {
+            if (shift)
+                ExportAll_Click(sender, new RoutedEventArgs());
+            else
+                ExportCurrent_Click(sender, new RoutedEventArgs());
+
+            e.Handled = true;
+            return;
+        }
+
+        if (control && e.Key == Key.N)
+        {
+            NewProject_Click(sender, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (control && e.Key == Key.S)
+        {
+            SaveProject(saveAs: shift || _currentProjectPath is null);
+            e.Handled = true;
+            return;
+        }
+
+        if (control && e.Key == Key.O)
+        {
+            OpenProject_Click(sender, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (_items.Count == 0 || Keyboard.FocusedElement is Slider)
+            return;
+
+        if (e.Key == Key.Left)
+        {
+            NavigateRelative(-1);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Right)

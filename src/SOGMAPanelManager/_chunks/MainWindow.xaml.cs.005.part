@@ -1,0 +1,231 @@
+        _syncingThumbnailScroll = true;
+        try
+        {
+            double max = Math.Max(0, ThumbnailStripScrollViewer.ScrollableWidth);
+            ThumbnailScrollBar.Minimum = 0;
+            ThumbnailScrollBar.Maximum = max;
+            ThumbnailScrollBar.ViewportSize = Math.Max(1, ThumbnailStripScrollViewer.ViewportWidth);
+            ThumbnailScrollBar.Value = Math.Clamp(ThumbnailStripScrollViewer.HorizontalOffset, 0, max);
+            ThumbnailScrollBar.Visibility = max > 0.5 ? Visibility.Visible : Visibility.Hidden;
+        }
+        finally
+        {
+            _syncingThumbnailScroll = false;
+        }
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typed) return typed;
+            T? nested = FindVisualChild<T>(child);
+            if (nested is not null) return nested;
+        }
+        return null;
+    }
+
+    private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
+    {
+        while (child is not null)
+        {
+            if (child is T typed) return typed;
+            child = VisualTreeHelper.GetParent(child);
+        }
+        return null;
+    }
+
+    private void ThumbnailList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var container = ItemsControl.ContainerFromElement(ThumbnailList, e.OriginalSource as DependencyObject) as ListBoxItem;
+        if (container is null) return;
+        if (ThumbnailList.ItemContainerGenerator.ItemFromContainer(container) is not ImageItem item) return;
+
+        ThumbnailList.SelectedItem = item;
+
+        var menu = new ContextMenu
+        {
+            PlacementTarget = container,
+            Placement = PlacementMode.MousePoint,
+            Background = new SolidColorBrush(Color.FromRgb(34, 36, 40)),
+            Foreground = Brushes.White
+        };
+
+        var edit = new MenuItem { Header = "Editar panel / censura…" };
+        edit.Click += (_, _) => OpenPanelEditor(item);
+        menu.Items.Add(edit);
+
+        var note = new MenuItem { Header = item.HasPremiereNote ? "Editar nota para Premiere…" : "Añadir nota para Premiere…" };
+        note.Click += (_, _) => OpenPanelEditor(item);
+        menu.Items.Add(note);
+
+        if (item.HasPremiereNote)
+        {
+            menu.Items.Add(new Separator());
+            var clear = new MenuItem { Header = "Quitar nota de Premiere" };
+            clear.Click += (_, _) =>
+            {
+                item.PremiereNote = "";
+                MarkDirty();
+                StatusText.Text = $"Nota de Premiere eliminada: {item.FileName}";
+            };
+            menu.Items.Add(clear);
+        }
+
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private void OpenPanelEditor(ImageItem item)
+    {
+        try
+        {
+            var source = LoadBitmap(item.FilePath);
+            var dialog = new PanelEditorWindow(item, source) { Owner = this };
+            if (dialog.ShowDialog() != true) return;
+
+            bool editsChanged = !RegionsEqual(item.EditRegions, dialog.ResultRegions);
+            bool noteChanged = !string.Equals(item.PremiereNote, dialog.ResultPremiereNote, StringComparison.Ordinal);
+
+            if (editsChanged)
+            {
+                item.EditRegions.Clear();
+                item.EditRegions.AddRange(dialog.ResultRegions.Select(r => r.Clone()));
+                item.IsAdjusted = true;
+                item.NotifyEditsChanged();
+                item.Thumbnail = BuildThumbnail(item);
+            }
+
+            if (noteChanged)
+                item.PremiereNote = dialog.ResultPremiereNote;
+
+            if (editsChanged || noteChanged)
+            {
+                MarkDirty();
+                if (ReferenceEquals(ThumbnailList.SelectedItem, item))
+                {
+                    var edited = ImageEffects.Apply(source, item.EditRegions);
+                    MainImage.Source = edited;
+                    ImageInfoText.Text = $"{edited.PixelWidth} × {edited.PixelHeight} px";
+                    UpdatePreviousReference();
+                }
+                StatusText.Text = editsChanged
+                    ? $"Edición aplicada: {item.FileName}"
+                    : $"Nota para Premiere guardada: {item.FileName}";
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowError("No se pudo abrir el editor del panel.", ex);
+        }
+    }
+
+    private static bool RegionsEqual(IReadOnlyList<PanelEditRegion> a, IReadOnlyList<PanelEditRegion> b)
+    {
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+        {
+            var x = a[i]; var y = b[i];
+            if (Math.Abs(x.X-y.X) > 0.00001 || Math.Abs(x.Y-y.Y) > 0.00001 ||
+                Math.Abs(x.Width-y.Width) > 0.00001 || Math.Abs(x.Height-y.Height) > 0.00001 ||
+                x.Strength != y.Strength || !string.Equals(x.Effect, y.Effect, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return true;
+    }
+
+    private static BitmapSource BuildThumbnail(ImageItem item)
+    {
+        BitmapSource edited = ImageEffects.Apply(LoadBitmap(item.FilePath), item.EditRegions);
+        double scale = Math.Min(1.0, 260.0 / Math.Max(1, edited.PixelWidth));
+        if (scale >= 0.999) return edited;
+        var transformed = new TransformedBitmap(edited, new ScaleTransform(scale, scale));
+        transformed.Freeze();
+        return transformed;
+    }
+
+    private void MarkDirty()
+    {
+        if (_loadingProjectSettings)
+            return;
+
+        _isDirty = true;
+        UpdateWindowTitle();
+    }
+
+    private void UpdateWindowTitle()
+    {
+        string name = _currentProjectPath is null
+            ? "Sin proyecto"
+            : Path.GetFileName(_currentProjectPath);
+
+        Title = $"SOGMA Panel Manager - Fase 10.7 — {name}{(_isDirty ? " *" : "")}";
+    }
+
+    private void CleanupTemporaryProjectFolder()
+    {
+        if (string.IsNullOrWhiteSpace(_temporaryProjectFolder))
+            return;
+
+        try
+        {
+            if (Directory.Exists(_temporaryProjectFolder))
+                Directory.Delete(_temporaryProjectFolder, recursive: true);
+        }
+        catch
+        {
+        }
+
+        _temporaryProjectFolder = null;
+    }
+
+    private static string GetUniquePath(string folder, string fileName)
+    {
+        string path = Path.Combine(folder, fileName);
+        if (!File.Exists(path))
+            return path;
+
+        string baseName = Path.GetFileNameWithoutExtension(fileName);
+        string extension = Path.GetExtension(fileName);
+
+        for (int i = 2; ; i++)
+        {
+            path = Path.Combine(folder, $"{baseName}_{i}{extension}");
+            if (!File.Exists(path))
+                return path;
+        }
+    }
+
+    private static BitmapImage LoadBitmap(string filePath, int decodePixelWidth = 0)
+    {
+        using var stream = new FileStream(
+            filePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+
+        if (decodePixelWidth > 0)
+            bitmap.DecodePixelWidth = decodePixelWidth;
+
+        bitmap.StreamSource = stream;
+        bitmap.EndInit();
+        bitmap.Freeze();
+
+        return bitmap;
+    }
+
+    private static void ShowError(string message, Exception ex)
+    {
+        MessageBox.Show(
+            $"{message}\n\n{ex.Message}",
+            "SOGMA Panel Manager",
+            MessageBoxButton.OK,
+            MessageBoxImage.Error);
+    }
+}

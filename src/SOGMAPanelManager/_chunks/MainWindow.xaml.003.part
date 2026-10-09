@@ -1,0 +1,185 @@
+                                        <ScaleTransform x:Name="PreviousSolidScaleTransform"
+                                                        ScaleX="1"
+                                                        ScaleY="1"/>
+                                    </Border.RenderTransform>
+                                </Border>
+
+
+
+                                <!-- Panel actual -->
+                                <Image x:Name="MainImage"
+                                       Margin="18"
+                                       Stretch="Uniform"
+                                       HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       RenderTransformOrigin="0.5,0.5">
+                                    <Image.RenderTransform>
+                                        <ScaleTransform x:Name="ImageScaleTransform"
+                                                        ScaleX="1"
+                                                        ScaleY="1"/>
+                                    </Image.RenderTransform>
+                                </Image>
+
+                                <!-- Glow del panel anterior, renderizado por encima del panel actual -->
+                                <Canvas x:Name="GlowOverlay"
+                                        IsHitTestVisible="False"
+                                        Visibility="Collapsed"
+                                        ClipToBounds="True">
+                                    <Border x:Name="PreviousGlowReference"
+                                            Background="Transparent"
+                                            BorderThickness="3"
+                                            Visibility="Collapsed">
+                                        <Border.Effect>
+                                            <DropShadowEffect x:Name="PreviousGlowEffect"
+                                                              BlurRadius="10"
+                                                              ShadowDepth="0"
+                                                              Opacity="1"
+                                                              Color="#FFFF4D6D"/>
+                                        </Border.Effect>
+                                    </Border>
+                                </Canvas>
+                            </Grid>
+
+                            <!-- Guías visuales: centro, zona segura y límite -->
+                            <Grid IsHitTestVisible="False">
+                                <Grid x:Name="CenterGuidesOverlay">
+                                    <Line X1="480" Y1="0" X2="480" Y2="492"
+                                          Stroke="#38DDEB" StrokeThickness="1" Opacity="0.85"/>
+                                    <Line X1="0" Y1="246" X2="912" Y2="246"
+                                          Stroke="#38DDEB" StrokeThickness="1" Opacity="0.85"/>
+                                </Grid>
+
+                                <Border x:Name="SafeAreaOverlay"
+                                        Margin="118,72"
+                                        BorderBrush="#A13A52"
+                                        BorderThickness="2"
+                                        CornerRadius="2"
+                                        Opacity="0.7"/>
+
+
+                            </Grid>
+                        </Grid>
+
+                        <!-- Límite real del canvas: coincide exactamente con 1920 × 1080 -->
+                        <Border x:Name="CanvasLimitsOverlay" IsHitTestVisible="False"
+                                BorderBrush="#697B9E" BorderThickness="1" Background="Transparent"/>
+
+                        <TextBlock Text="1920 × 1080"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Bottom"
+                                   Margin="0,0,8,6"
+                                   Foreground="#8F8F8F"
+                                   FontSize="11"/>
+                    </Grid>
+                </Viewbox>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2"
+                Background="{StaticResource PanelBrush}"
+                BorderBrush="{StaticResource BorderBrushDark}"
+                BorderThickness="1"
+                CornerRadius="7"
+                Padding="8,7,8,6">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="24"/>
+                </Grid.RowDefinitions>
+
+                <!-- ScrollViewer EXPLÍCITO. No dependemos del ScrollViewer interno del ListBox. -->
+                <ScrollViewer x:Name="ThumbnailStripScrollViewer"
+                              Grid.Row="0"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled"
+                              CanContentScroll="False"
+                              PanningMode="HorizontalOnly"
+                              ScrollChanged="ThumbnailStripScrollViewer_ScrollChanged">
+                    <ListBox x:Name="ThumbnailList"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             SelectionChanged="ThumbnailList_SelectionChanged"
+                             PreviewMouseLeftButtonUp="ThumbnailList_PreviewMouseLeftButtonUp"
+                             ItemContainerStyle="{StaticResource ThumbnailItemStyle}">
+                        <!-- El ListBox no crea un ScrollViewer propio. El desplazamiento pertenece al contenedor exterior. -->
+                        <ListBox.Template>
+                            <ControlTemplate TargetType="ListBox">
+                                <ItemsPresenter/>
+                            </ControlTemplate>
+                        </ListBox.Template>
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Width="178" Height="116" ToolTip="{Binding FileName}">
+                                    <Border Background="#151515" CornerRadius="4">
+                                        <Grid>
+                                            <Image Source="{Binding Thumbnail}"
+                                                   Margin="5"
+                                                   Stretch="Uniform"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                                            <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="5"
+                                                    Width="27" Height="27" CornerRadius="7" Background="#C91B2520"
+                                                    BorderBrush="#5B9D70" BorderThickness="1"
+                                                    Visibility="{Binding IsAdjusted, Converter={StaticResource BoolToVisibility}}"
+                                                    ToolTip="Panel modificado">
+                                                <Viewbox Margin="4">
+                                                    <Canvas Width="24" Height="24">
+                                                        <Path Data="M12,4 H8.8 C7.11984,4 6.27976,4 5.63803,4.32698 C5.07354,4.6146 4.6146,5.07354 4.32698,5.63803 C4,6.27976 4,7.11984 4,8.8 V15.2 C4,16.8802 4,17.7202 4.32698,18.362 C4.6146,18.9265 5.07354,19.3854 5.63803,19.673 C6.27976,20 7.11984,20 8.8,20 H15.2 C16.8802,20 17.7202,20 18.362,19.673 C18.9265,19.3854 19.3854,18.9265 19.673,18.362 C20,17.7202 20,16.8802 20,15.2 V11" Stroke="#8ED1A5" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent"/>
+                                                        <Path Data="M4,16 L8.29289,11.7071 C8.68342,11.3166 9.31658,11.3166 9.70711,11.7071 L13,15 M13,15 L15.7929,12.2071 C16.1834,11.8166 16.8166,11.8166 17.2071,12.2071 L20,15 M13,15 L15.25,17.25" Stroke="#8ED1A5" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent"/>
+                                                        <Path Data="M15,6 L17,8 L20.5,4.5" Stroke="#C7F4D5" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent"/>
+                                                    </Canvas>
+                                                </Viewbox>
+                                            </Border>
+
+                                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5"
+                                                    Padding="6,3" CornerRadius="6" Background="#D0354256"
+                                                    Visibility="{Binding HasEdits, Converter={StaticResource BoolToVisibility}}"
+                                                    ToolTip="Ediciones/censuras del panel">
+                                                <TextBlock Text="{Binding EditBadge}" FontSize="10" FontWeight="SemiBold" Foreground="#DCE8FF"/>
+                                            </Border>
+
+                                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="5"
+                                                    Padding="6,3" CornerRadius="6" Background="#D04C3D24"
+                                                    Visibility="{Binding HasPremiereNote, Converter={StaticResource BoolToVisibility}}"
+                                                    ToolTip="{Binding PremiereNote}">
+                                                <TextBlock Text="PREMIERE" FontSize="9" FontWeight="SemiBold" Foreground="#FFD78B"/>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </ScrollViewer>
+
+                <Grid Grid.Row="1" Margin="4,4,4,0">
+                    <ScrollBar x:Name="ThumbnailScrollBar"
+                               Orientation="Horizontal"
+                               Height="18"
+                               VerticalAlignment="Center"
+                               Minimum="0"
+                               Maximum="0"
+                               ViewportSize="1"
+                               SmallChange="70"
+                               LargeChange="420"
+                               Style="{StaticResource MinimalScrollBarStyle}"
+                               ValueChanged="ThumbnailScrollBar_ValueChanged"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <TextBlock Grid.Row="3"
+                   x:Name="StatusText"
+                   Text="Listo."
+                   VerticalAlignment="Center"
+                   Foreground="{StaticResource MutedTextBrush}"
+                   FontSize="12"/>
+    </Grid>
+</Window>

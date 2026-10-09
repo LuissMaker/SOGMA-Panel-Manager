@@ -171,7 +171,7 @@ internal static class UpdaterService
         int pid = Environment.ProcessId;
         string scriptPath = Path.Combine(Path.GetTempPath(), "SOGMA_Updater_" + Guid.NewGuid().ToString("N") + ".cmd");
 
-        string script = $"""@echo off
+        string script = $"""\n@echo off
 setlocal
 set "PID={pid}"
 set "SOURCE={payloadPath}"

@@ -171,34 +171,36 @@ internal static class UpdaterService
         int pid = Environment.ProcessId;
         string scriptPath = Path.Combine(Path.GetTempPath(), "SOGMA_Updater_" + Guid.NewGuid().ToString("N") + ".cmd");
 
-        string script = $"""\n@echo off
-setlocal
-set "PID={pid}"
-set "SOURCE={payloadPath}"
-set "TARGET={installPath}"
-set "APP={exePath}"
-set "TEMPROOT={updateRoot}"
-
-:wait_for_app
-for /f "tokens=2" %%P in ('tasklist /FI "PID eq %PID%" /NH 2^>nul') do (
-    if "%%P"=="%PID%" (
-        timeout /t 1 /nobreak >nul
-        goto wait_for_app
-    )
-)
-
-robocopy "%SOURCE%" "%TARGET%" /E /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >nul
-set "RC=%ERRORLEVEL%"
-if %RC% GEQ 8 (
-    start "" cmd /c "echo No se pudo instalar la actualizacion de SOGMA. Codigo robocopy: %RC% & pause"
-    exit /b %RC%
-)
-
-start "" "%APP%"
-timeout /t 2 /nobreak >nul
-rmdir /s /q "%TEMPROOT%" 2>nul
-(goto) 2>nul & del "%~f0"
-""";
+        string script = string.Join(Environment.NewLine, new[]
+        {
+            "@echo off",
+            "setlocal",
+            $"set \"PID={pid}\"",
+            $"set \"SOURCE={payloadPath}\"",
+            $"set \"TARGET={installPath}\"",
+            $"set \"APP={exePath}\"",
+            $"set \"TEMPROOT={updateRoot}\"",
+            "",
+            ":wait_for_app",
+            "for /f \"tokens=2\" %%P in ('tasklist /FI \"PID eq %PID%\" /NH 2^>nul') do (",
+            "    if \"%%P\"==\"%PID%\" (",
+            "        timeout /t 1 /nobreak >nul",
+            "        goto wait_for_app",
+            "    )",
+            ")",
+            "",
+            "robocopy \"%SOURCE%\" \"%TARGET%\" /E /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >nul",
+            "set \"RC=%ERRORLEVEL%\"",
+            "if %RC% GEQ 8 (",
+            "    start \"\" cmd /c \"echo No se pudo instalar la actualizacion de SOGMA. Codigo robocopy: %RC% & pause\"",
+            "    exit /b %RC%",
+            ")",
+            "",
+            "start \"\" \"%APP%\"",
+            "timeout /t 2 /nobreak >nul",
+            "rmdir /s /q \"%TEMPROOT%\" 2>nul",
+            "(goto) 2>nul & del \"%~f0\""
+        });
 
         File.WriteAllText(scriptPath, script);
 

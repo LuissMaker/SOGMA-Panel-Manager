@@ -1,0 +1,28 @@
+{
+  "manifestVersion": 5,
+  "id": "com.sogma.notesbridge",
+  "name": "SOGMA Notes",
+  "version": "0.1.0",
+  "main": "index.html",
+  "host": {
+    "app": "premierepro",
+    "minVersion": "25.6.0"
+  },
+  "entrypoints": [
+    {
+      "type": "panel",
+      "id": "sogmaNotesPanel",
+      "label": {
+        "default": "SOGMA Notes"
+      },
+      "minimumSize": {
+        "width": 260,
+        "height": 300
+      },
+      "preferredDockedSize": {
+        "width": 320,
+        "height": 520
+      }
+    }
+  ]
+}

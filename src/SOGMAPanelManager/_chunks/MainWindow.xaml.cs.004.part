@@ -1,0 +1,294 @@
+        PreviousGlowReference.Height = Math.Max(0, bottom - top);
+
+        Canvas.SetLeft(PreviousGlowReference, left);
+        Canvas.SetTop(PreviousGlowReference, top);
+
+        PreviousGlowReference.Visibility = Visibility.Visible;
+        GlowOverlay.Visibility = Visibility.Visible;
+    }
+
+    private Rect CalculateDisplayedRect(int pixelWidth, int pixelHeight, double scale)
+    {
+        double viewportWidth = Math.Max(0, PanelViewport.ActualWidth);
+        double viewportHeight = Math.Max(0, PanelViewport.ActualHeight);
+
+        const double imageMargin = 18.0;
+        double availableWidth = Math.Max(1, viewportWidth - imageMargin * 2);
+        double availableHeight = Math.Max(1, viewportHeight - imageMargin * 2);
+
+        double fit = Math.Min(
+            availableWidth / Math.Max(1, pixelWidth),
+            availableHeight / Math.Max(1, pixelHeight));
+
+        double width = pixelWidth * fit * scale;
+        double height = pixelHeight * fit * scale;
+
+        return new Rect(
+            (viewportWidth - width) / 2.0,
+            (viewportHeight - height) / 2.0,
+            width,
+            height);
+    }
+
+    private void NavigateRelative(int offset)
+    {
+        int target = Math.Clamp(
+            ThumbnailList.SelectedIndex + offset,
+            0,
+            _items.Count - 1);
+        SelectIndex(target);
+    }
+
+    private void SelectIndex(int index)
+    {
+        if (index < 0 || index >= _items.Count)
+            return;
+
+        ThumbnailList.SelectedIndex = index;
+        EnsureSelectedThumbnailVisible(center: true);
+    }
+
+    private double GetKeyboardScaleStep()
+    {
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            return 0.0025;
+
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            return 0.01;
+
+        return 0.05;
+    }
+
+    private void SetItemScale(
+        ImageItem item,
+        double scale,
+        bool markAdjusted,
+        bool updateSlider = true)
+    {
+        item.Scale = Math.Round(scale, 4);
+
+        if (markAdjusted)
+            item.IsAdjusted = true;
+
+        MarkDirty();
+        ApplyScale(item.Scale, updateSlider);
+    }
+
+    private void ApplyScale(double scale, bool updateSlider = true)
+    {
+        ImageScaleTransform.ScaleX = scale;
+        ImageScaleTransform.ScaleY = scale;
+
+        if (updateSlider)
+            SetScaleControls(scale);
+        else
+            ScaleText.Text = $"{scale * 100:0.##}%";
+
+        if (ThumbnailList.SelectedItem is ImageItem item)
+            StatusText.Text = $"{item.FileName} · Escala {scale * 100:0.##}%";
+
+        if (GlowReferenceCheck?.IsChecked == true)
+        {
+            Dispatcher.BeginInvoke(
+                DispatcherPriority.Render,
+                new Action(UpdateGlowGeometry));
+        }
+    }
+
+    private void SetScaleControls(double scale)
+    {
+        _updatingScaleControls = true;
+        try
+        {
+            ScaleSlider.Value = scale * 100.0;
+            ScaleText.Text = $"{scale * 100:0.##}%";
+        }
+        finally
+        {
+            _updatingScaleControls = false;
+        }
+    }
+
+
+
+    private void WriteProjectPremiereSidecar(string projectPath)
+    {
+        try
+        {
+            string sidecar = Path.ChangeExtension(projectPath, ".premiere.json");
+            WritePremiereNotesFile(sidecar, _items);
+        }
+        catch { }
+    }
+
+    private static void WritePremiereNotesSidecar(string folder, IEnumerable<ImageItem> items)
+    {
+        try
+        {
+            string sidecar = Path.Combine(folder, "SOGMA_PREMIERE_NOTES.json");
+            WritePremiereNotesFile(sidecar, items);
+        }
+        catch { }
+    }
+
+    private static void WritePremiereNotesFile(string path, IEnumerable<ImageItem> items)
+    {
+        var payload = new
+        {
+            format = "SOGMA_PREMIERE_NOTES",
+            version = 1,
+            generatedAtUtc = DateTime.UtcNow,
+            panels = items.Where(i => i.HasPremiereNote).Select(i => new
+            {
+                fileName = BuildExportFileName(i),
+                sourceFileName = i.FileName,
+                note = i.PremiereNote
+            }).ToList()
+        };
+        File.WriteAllText(path, JsonSerializer.Serialize(payload, JsonOptions));
+    }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        await CheckForUpdatesAsync(silent: false);
+    }
+
+    private async Task CheckForUpdatesAsync(bool silent)
+    {
+        try
+        {
+            UpdateButtonText.Text = "Buscando…";
+            var update = await UpdaterService.CheckForUpdateAsync();
+
+            if (update is null)
+            {
+                UpdateButtonText.Text = "Actualizar";
+                if (!silent)
+                {
+                    MessageBox.Show(
+                        $"SOGMA Panel Manager v{UpdaterService.CurrentVersion} está actualizado.",
+                        "Actualizaciones",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+                return;
+            }
+
+            UpdateButtonText.Text = $"v{update.Version}";
+            string notes = string.IsNullOrWhiteSpace(update.Notes)
+                ? "Hay una nueva versión disponible."
+                : update.Notes.Trim();
+
+            var result = MessageBox.Show(
+                $"Nueva versión disponible: v{update.Version}\n\n{notes}\n\n¿Quieres descargarla e instalarla ahora?",
+                "Actualización de SOGMA",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+
+            if (result != MessageBoxResult.Yes)
+                return;
+
+            if (_isDirty)
+            {
+                var save = MessageBox.Show(
+                    "Hay cambios sin guardar en el proyecto. Guarda el proyecto antes de actualizar.\n\n¿Quieres continuar de todos modos?",
+                    "Cambios sin guardar",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+                if (save != MessageBoxResult.Yes)
+                    return;
+            }
+
+            UpdateButtonText.Text = "Descargando…";
+            StatusText.Text = $"Descargando SOGMA v{update.Version}…";
+
+            var progress = new Progress<double>(value =>
+            {
+                int percent = (int)Math.Round(value * 100);
+                UpdateButtonText.Text = $"{percent}%";
+                StatusText.Text = $"Descargando actualización… {percent}%";
+            });
+
+            await UpdaterService.DownloadAndInstallAsync(update, progress);
+
+            StatusText.Text = "Actualización descargada. Reiniciando…";
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            UpdateButtonText.Text = "Actualizar";
+            if (!silent)
+                ShowError("No se pudo comprobar o instalar la actualización.", ex);
+        }
+    }
+
+    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        UpdateThumbnailScrollBar();
+        EnsureSelectedThumbnailVisible(center: true);
+
+        await CheckForUpdatesAsync(silent: true);
+    }
+
+    private void ThumbnailStripScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (_syncingThumbnailScroll) return;
+        UpdateThumbnailScrollBar();
+    }
+
+    private void ThumbnailScrollBar_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_syncingThumbnailScroll || ThumbnailStripScrollViewer is null) return;
+        ThumbnailStripScrollViewer.ScrollToHorizontalOffset(e.NewValue);
+    }
+
+    private void EnsureSelectedThumbnailVisible(bool center)
+    {
+        if (ThumbnailList.SelectedItem is not ImageItem selected)
+            return;
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+        {
+            if (ThumbnailList.ItemContainerGenerator.ContainerFromItem(selected) is not ListBoxItem container)
+                return;
+
+            if (ThumbnailStripScrollViewer.ViewportWidth <= 0)
+                return;
+
+            try
+            {
+                Point p = container.TranslatePoint(new Point(0, 0), ThumbnailList);
+                double left = p.X;
+                double right = left + container.ActualWidth;
+                double viewportLeft = ThumbnailStripScrollViewer.HorizontalOffset;
+                double viewportRight = viewportLeft + ThumbnailStripScrollViewer.ViewportWidth;
+                double target = viewportLeft;
+
+                if (center)
+                {
+                    target = left + (container.ActualWidth / 2.0)
+                             - (ThumbnailStripScrollViewer.ViewportWidth / 2.0);
+                }
+                else if (left < viewportLeft)
+                {
+                    target = left;
+                }
+                else if (right > viewportRight)
+                {
+                    target = right - ThumbnailStripScrollViewer.ViewportWidth;
+                }
+
+                target = Math.Clamp(target, 0, ThumbnailStripScrollViewer.ScrollableWidth);
+                ThumbnailStripScrollViewer.ScrollToHorizontalOffset(target);
+                UpdateThumbnailScrollBar();
+            }
+            catch
+            {
+            }
+        }));
+    }
+
+    private void UpdateThumbnailScrollBar()
+    {
+        if (ThumbnailStripScrollViewer is null || ThumbnailScrollBar is null) return;
+

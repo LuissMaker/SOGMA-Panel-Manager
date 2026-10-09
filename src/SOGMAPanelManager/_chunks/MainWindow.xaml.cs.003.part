@@ -1,0 +1,298 @@
+        {
+            NavigateRelative(1);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Up || e.Key == Key.Down)
+        {
+            if (ThumbnailList.SelectedItem is ImageItem selected)
+            {
+                double step = GetKeyboardScaleStep();
+                SetItemScale(
+                    selected,
+                    selected.Scale + (e.Key == Key.Up ? step : -step),
+                    markAdjusted: true);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.G)
+        {
+            ShowPreviousReferenceCheck.IsChecked =
+                ShowPreviousReferenceCheck.IsChecked != true;
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.C)
+        {
+            SolidReferenceCheck.IsChecked =
+                SolidReferenceCheck.IsChecked != true;
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.D)
+        {
+            GlowReferenceCheck.IsChecked =
+                GlowReferenceCheck.IsChecked != true;
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Home)
+        {
+            SelectIndex(0);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.End)
+        {
+            SelectIndex(_items.Count - 1);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Enter)
+        {
+            ConfirmAndAdvance();
+            e.Handled = true;
+            return;
+        }
+
+        if (ThumbnailList.SelectedItem is not ImageItem item)
+            return;
+
+        if (e.Key == Key.D0 || e.Key == Key.NumPad0)
+        {
+            SetItemScale(item, 1.0, markAdjusted: true);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Add || e.Key == Key.OemPlus)
+        {
+            SetItemScale(item, item.Scale + 0.05, markAdjusted: true);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Subtract || e.Key == Key.OemMinus)
+        {
+            SetItemScale(item, item.Scale - 0.05, markAdjusted: true);
+            e.Handled = true;
+        }
+    }
+
+    private void ConfirmAndAdvance()
+    {
+        if (ThumbnailList.SelectedItem is not ImageItem current)
+            return;
+
+        current.IsAdjusted = true;
+        MarkDirty();
+
+        int nextIndex = ThumbnailList.SelectedIndex + 1;
+        if (nextIndex >= _items.Count)
+        {
+            StatusText.Text = "Último panel confirmado.";
+            return;
+        }
+
+        ImageItem next = _items[nextIndex];
+
+        if (InheritScaleCheck.IsChecked == true)
+            next.Scale = current.Scale;
+
+        ThumbnailList.SelectedIndex = nextIndex;
+        EnsureSelectedThumbnailVisible(center: true);
+
+        StatusText.Text = InheritScaleCheck.IsChecked == true
+            ? $"Panel confirmado. El siguiente heredó {current.Scale * 100:0.##}%."
+            : "Panel confirmado. Avanzaste al siguiente.";
+    }
+
+    private void CanvasGuideOption_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded)
+            return;
+
+        CenterGuidesOverlay.Visibility = ShowCenterGuidesCheck.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        SafeAreaOverlay.Visibility = ShowSafeAreaCheck.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        CanvasLimitsOverlay.Visibility = ShowCanvasLimitsCheck.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        WorkspaceOuterFrame.Visibility = ShowOuterFrameCheck.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        WorkspaceInnerFrame.Visibility = ShowInnerFrameCheck.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        if (!_loadingProjectSettings)
+            MarkDirty();
+    }
+
+    private void PreviousReferenceOption_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded)
+            return;
+
+        if (!_loadingProjectSettings)
+            MarkDirty();
+
+        UpdatePreviousReference();
+    }
+
+    private void ReferenceOpacitySlider_ValueChanged(
+        object sender,
+        RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!IsLoaded || ReferenceOpacityText is null)
+            return;
+
+        ReferenceOpacityText.Text = $"{e.NewValue:0}%";
+
+        if (!_loadingProjectSettings)
+            MarkDirty();
+
+        ApplyPreviousReferenceOpacity();
+    }
+
+    private void ApplyPreviousReferenceOpacity()
+    {
+        double opacity = ReferenceOpacitySlider.Value / 100.0;
+        PreviousImage.Opacity = opacity;
+        PreviousSolidReference.Opacity = opacity;
+        GlowOverlay.Opacity = opacity;
+    }
+
+    private void UpdatePreviousReference()
+    {
+        if (!IsLoaded)
+            return;
+
+        HidePreviousReferences();
+        _previousReferenceBitmap = null;
+
+        if (ShowPreviousReferenceCheck.IsChecked != true)
+            return;
+
+        int previousIndex = ThumbnailList.SelectedIndex - 1;
+        if (previousIndex < 0 || previousIndex >= _items.Count)
+            return;
+
+        ImageItem previous = _items[previousIndex];
+
+        try
+        {
+            _previousReferenceBitmap = ImageEffects.Apply(LoadBitmap(previous.FilePath), previous.EditRegions);
+
+            PreviousImageScaleTransform.ScaleX = previous.Scale;
+            PreviousImageScaleTransform.ScaleY = previous.Scale;
+            PreviousSolidScaleTransform.ScaleX = previous.Scale;
+            PreviousSolidScaleTransform.ScaleY = previous.Scale;
+
+            int colorIndex = Math.Abs(ThumbnailList.SelectedIndex) % ReferenceColors.Length;
+            _activeReferenceBrush = new SolidColorBrush(ReferenceColors[colorIndex]);
+
+            ApplyPreviousReferenceOpacity();
+
+            if (GlowReferenceCheck.IsChecked == true)
+            {
+                Dispatcher.BeginInvoke(
+                    DispatcherPriority.Render,
+                    new Action(UpdateGlowGeometry));
+            }
+            else if (SolidReferenceCheck.IsChecked == true)
+            {
+                PreviousSolidReference.Background = _activeReferenceBrush;
+                PreviousSolidReference.OpacityMask = new ImageBrush(_previousReferenceBitmap)
+                {
+                    Stretch = Stretch.Uniform,
+                    AlignmentX = AlignmentX.Center,
+                    AlignmentY = AlignmentY.Center
+                };
+                PreviousSolidReference.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                PreviousImage.Source = _previousReferenceBitmap;
+                PreviousImage.Visibility = Visibility.Visible;
+            }
+        }
+        catch
+        {
+            HidePreviousReferences();
+        }
+    }
+
+    private void HidePreviousReferences()
+    {
+        PreviousImage.Source = null;
+        PreviousImage.Visibility = Visibility.Collapsed;
+        PreviousSolidReference.Visibility = Visibility.Collapsed;
+        PreviousSolidReference.OpacityMask = null;
+        GlowOverlay.Visibility = Visibility.Collapsed;
+        PreviousGlowReference.Visibility = Visibility.Collapsed;
+    }
+
+    private void PanelViewport_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!IsLoaded)
+            return;
+
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Render,
+            new Action(UpdateGlowGeometry));
+    }
+
+    private void UpdateGlowGeometry()
+    {
+        if (!IsLoaded ||
+            GlowReferenceCheck.IsChecked != true ||
+            ShowPreviousReferenceCheck.IsChecked != true ||
+            _previousReferenceBitmap is null ||
+            ThumbnailList.SelectedIndex <= 0)
+        {
+            GlowOverlay.Visibility = Visibility.Collapsed;
+            PreviousGlowReference.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        ImageItem previous = _items[ThumbnailList.SelectedIndex - 1];
+
+        Rect rect = CalculateDisplayedRect(
+            _previousReferenceBitmap.PixelWidth,
+            _previousReferenceBitmap.PixelHeight,
+            previous.Scale);
+
+        Color glowColor = Colors.Magenta;
+
+        if (_activeReferenceBrush is SolidColorBrush solidBrush)
+            glowColor = solidBrush.Color;
+
+        PreviousGlowReference.BorderBrush = new SolidColorBrush(glowColor);
+        PreviousGlowReference.BorderThickness = new Thickness(3);
+
+        PreviousGlowEffect.Color = glowColor;
+        PreviousGlowEffect.BlurRadius = 10;
+        PreviousGlowEffect.ShadowDepth = 0;
+        PreviousGlowEffect.Opacity = 1;
+
+        const double glowPadding = 8.0;
+
+        double left = Math.Max(glowPadding, rect.Left);
+        double top = Math.Max(glowPadding, rect.Top);
+        double right = Math.Min(PanelViewport.ActualWidth - glowPadding, rect.Right);
+        double bottom = Math.Min(PanelViewport.ActualHeight - glowPadding, rect.Bottom);
+
+        PreviousGlowReference.Width = Math.Max(0, right - left);

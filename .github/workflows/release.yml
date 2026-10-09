@@ -1,0 +1,66 @@
+name: Build SOGMA release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'RELEASE_VERSION'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content RELEASE_VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "RELEASE_VERSION invalido: $version" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish portable single-file
+        shell: pwsh
+        run: |
+          dotnet publish "src/SOGMAPanelManager/SOGMAPanelManager.csproj" `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=${{ steps.version.outputs.version }} `
+            -o "publish"
+
+      - name: Create update ZIP
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $zip = "SOGMA-Panel-Manager-v$version.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path "publish/*" -DestinationPath $zip -CompressionLevel Optimal
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $version = "${{ steps.version.outputs.version }}"
+          $zip = "SOGMA-Panel-Manager-v$version.zip"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "La release $tag ya existe. Cambia RELEASE_VERSION antes de publicar."
+          }
+          gh release create $tag $zip --title "SOGMA Panel Manager v$version" --generate-notes

@@ -1,0 +1,296 @@
+    {
+        return Path.Combine(folder, BuildExportFileName(item));
+    }
+
+    private static bool ShouldExportItem(ImageItem item, string outputPath)
+    {
+        if (!File.Exists(outputPath))
+            return true;
+
+        DateTime sourceModifiedUtc;
+        try
+        {
+            sourceModifiedUtc = File.GetLastWriteTimeUtc(item.FilePath);
+        }
+        catch
+        {
+            sourceModifiedUtc = DateTime.MinValue;
+        }
+
+        DateTime requiredModifiedUtc = item.LastModifiedUtc > sourceModifiedUtc
+            ? item.LastModifiedUtc
+            : sourceModifiedUtc;
+
+        return File.GetLastWriteTimeUtc(outputPath) < requiredModifiedUtc;
+    }
+
+    private static string GetExportPath(string folder, ImageItem item)
+    {
+        string exportFileName = BuildExportFileName(item);
+        string baseName = Path.GetFileNameWithoutExtension(exportFileName);
+        string candidate = Path.Combine(folder, exportFileName);
+
+        if (!File.Exists(candidate))
+            return candidate;
+
+        for (int i = 2; ; i++)
+        {
+            candidate = Path.Combine(folder, $"{baseName}_{i}.png");
+
+            if (!File.Exists(candidate))
+                return candidate;
+        }
+    }
+
+    private static string BuildExportFileName(ImageItem item)
+    {
+        string baseName = SanitizeFileName(Path.GetFileNameWithoutExtension(item.FileName));
+        string tag = FormatPremiereExportTag(item.PremiereNote);
+
+        return string.IsNullOrWhiteSpace(tag)
+            ? baseName + ".png"
+            : $"{baseName}__[{tag}].png";
+    }
+
+    private static string FormatPremiereExportTag(string? note)
+    {
+        if (string.IsNullOrWhiteSpace(note))
+            return string.Empty;
+
+        string tag = note.Trim();
+
+        while (tag.StartsWith('[') && tag.EndsWith(']') && tag.Length > 1)
+            tag = tag[1..^1].Trim();
+
+        foreach (char character in Path.GetInvalidFileNameChars())
+            tag = tag.Replace(character, ' ');
+
+        foreach (char character in new[] { '<', '>', ':', '\"', '/', '\\', '|', '?', '*' })
+            tag = tag.Replace(character, ' ');
+
+        tag = string.Join(" ", tag
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        return tag.ToUpperInvariant();
+    }
+
+    private static string SanitizeFileName(string fileName)
+    {
+        char[] invalid = Path.GetInvalidFileNameChars();
+
+        foreach (char character in invalid)
+            fileName = fileName.Replace(character, '_');
+
+        return string.IsNullOrWhiteSpace(fileName)
+            ? "panel"
+            : fileName.Trim();
+    }
+
+    private void OpenFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ConfirmDiscardChanges())
+            return;
+
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Seleccionar carpeta con paneles",
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog() == true)
+            LoadFolder(dialog.FolderName);
+    }
+
+    private void OpenProject_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ConfirmDiscardChanges())
+            return;
+
+        var dialog = new OpenFileDialog
+        {
+            Title = "Abrir proyecto SOGMA",
+            Filter = "Proyecto SOGMA (*.sogma)|*.sogma|Todos los archivos (*.*)|*.*",
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog() == true)
+            OpenProject(dialog.FileName);
+    }
+
+    private void SaveProject_Click(object sender, RoutedEventArgs e)
+    {
+        SaveProject(saveAs: _currentProjectPath is null);
+    }
+
+    private void LoadFolder(string folderPath)
+    {
+        try
+        {
+            CleanupTemporaryProjectFolder();
+            ResetWorkspace();
+
+            _currentProjectPath = null;
+            FolderPathText.Text = folderPath;
+
+            var comparer = new NaturalStringComparer();
+            var imageFiles = Directory.EnumerateFiles(folderPath, "*.*", SearchOption.TopDirectoryOnly)
+                .Where(path => SupportedExtensions.Contains(Path.GetExtension(path)))
+                .OrderBy(path => Path.GetFileName(path), comparer)
+                .ToList();
+
+            foreach (var file in imageFiles)
+                TryAddImage(file, 1.0, false);
+
+            if (_items.Count > 0)
+            {
+                ThumbnailList.SelectedIndex = 0;
+                EnsureSelectedThumbnailVisible(center: true);
+            }
+
+            _isDirty = _items.Count > 0;
+            UpdateWindowTitle();
+
+            StatusText.Text = _items.Count == 0
+                ? "No se encontraron imágenes compatibles."
+                : $"{_items.Count} panel(es) cargado(s). Guarda un proyecto para incrustarlos.";
+        }
+        catch (Exception ex)
+        {
+            ShowError("No se pudo cargar la carpeta.", ex);
+        }
+    }
+
+    private void OpenProject(string projectPath)
+    {
+        string extractionFolder = Path.Combine(
+            Path.GetTempPath(),
+            "SOGMAPanelManager",
+            Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            Directory.CreateDirectory(extractionFolder);
+
+            using var archive = ZipFile.OpenRead(projectPath);
+            var manifestEntry = archive.GetEntry("project.json")
+                ?? throw new InvalidDataException("El proyecto no contiene project.json.");
+
+            SogmaProjectData project;
+            using (var stream = manifestEntry.Open())
+            {
+                project = JsonSerializer.Deserialize<SogmaProjectData>(stream, JsonOptions)
+                    ?? throw new InvalidDataException("No fue posible leer la configuración del proyecto.");
+            }
+
+            if (project.FormatVersion > 4)
+                throw new InvalidDataException("El proyecto fue creado con una versión más reciente.");
+
+            ResetWorkspace();
+            CleanupTemporaryProjectFolder();
+
+            foreach (var image in project.Images)
+            {
+                var entry = archive.GetEntry(image.ArchivePath)
+                    ?? throw new InvalidDataException($"Falta la imagen interna: {image.ArchivePath}");
+
+                string safeName = Path.GetFileName(image.FileName);
+                string outputPath = GetUniquePath(extractionFolder, safeName);
+
+                entry.ExtractToFile(outputPath, overwrite: true);
+                TryAddImage(outputPath, image.Scale, image.IsAdjusted, image.LastModifiedUtc, image.PremiereNote, image.EditRegions);
+            }
+
+            _temporaryProjectFolder = extractionFolder;
+            _currentProjectPath = projectPath;
+
+            _loadingProjectSettings = true;
+            try
+            {
+                EnableWheelScaleCheck.IsChecked = project.EnableWheelScale;
+                InheritScaleCheck.IsChecked = project.InheritScale;
+                ShowPreviousReferenceCheck.IsChecked = project.ShowPreviousReference;
+                SolidReferenceCheck.IsChecked = project.SolidReference;
+                GlowReferenceCheck.IsChecked = project.GlowReference || project.OutlineOnly;
+                ReferenceOpacitySlider.Value = Math.Clamp(project.ReferenceOpacity, 5, 70);
+                ShowCenterGuidesCheck.IsChecked = project.ShowCenterGuides;
+                ShowSafeAreaCheck.IsChecked = project.ShowSafeArea;
+                ShowCanvasLimitsCheck.IsChecked = project.ShowCanvasLimits;
+                ShowOuterFrameCheck.IsChecked = project.ShowOuterFrame;
+                ShowInnerFrameCheck.IsChecked = project.ShowInnerFrame;
+            }
+            finally
+            {
+                _loadingProjectSettings = false;
+            }
+
+            FolderPathText.Text = projectPath;
+
+            int selectedIndex = Math.Clamp(
+                project.SelectedIndex,
+                0,
+                Math.Max(0, _items.Count - 1));
+
+            if (_items.Count > 0)
+            {
+                ThumbnailList.SelectedIndex = selectedIndex;
+                EnsureSelectedThumbnailVisible(center: true);
+            }
+
+            _isDirty = false;
+            UpdateWindowTitle();
+            StatusText.Text = $"Proyecto abierto: {Path.GetFileName(projectPath)}";
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                if (Directory.Exists(extractionFolder))
+                    Directory.Delete(extractionFolder, recursive: true);
+            }
+            catch { }
+
+            ShowError("No se pudo abrir el proyecto.", ex);
+        }
+    }
+
+    private void SaveProject(bool saveAs)
+    {
+        if (_items.Count == 0)
+        {
+            MessageBox.Show(
+                "Primero abre una carpeta o un proyecto con imágenes.",
+                "SOGMA Panel Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        string? destination = _currentProjectPath;
+
+        if (saveAs || string.IsNullOrWhiteSpace(destination))
+        {
+            var dialog = new SaveFileDialog
+            {
+                Title = "Guardar proyecto SOGMA",
+                Filter = "Proyecto SOGMA (*.sogma)|*.sogma",
+                DefaultExt = ".sogma",
+                AddExtension = true,
+                FileName = _currentProjectPath is null
+                    ? "Proyecto SOGMA.sogma"
+                    : Path.GetFileName(_currentProjectPath)
+            };
+
+            if (dialog.ShowDialog() != true)
+                return;
+
+            destination = dialog.FileName;
+        }
+
+        string temporaryArchive = destination + ".tmp";
+
+        try
+        {
+            if (File.Exists(temporaryArchive))
+                File.Delete(temporaryArchive);
+
+            var project = new SogmaProjectData

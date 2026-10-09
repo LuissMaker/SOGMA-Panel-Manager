@@ -1,0 +1,190 @@
+                                    <RepeatButton Command="{x:Static Slider.IncreaseLarge}"
+                                                  Style="{StaticResource SliderIncreaseStyle}"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Scrollbar horizontal de miniaturas: visible, compacta y realmente arrastrable -->
+        <Style x:Key="MinimalScrollBarStyle" TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="MinHeight" Value="18"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Height="18" Background="Transparent">
+                            <Border x:Name="TrackBackground"
+                                    Height="10"
+                                    VerticalAlignment="Center"
+                                    Background="#2F353D"
+                                    BorderBrush="#414851"
+                                    BorderThickness="1"
+                                    CornerRadius="4"/>
+                            <Track x:Name="PART_Track"
+                                   Orientation="{TemplateBinding Orientation}"
+                                   Minimum="{TemplateBinding Minimum}"
+                                   Maximum="{TemplateBinding Maximum}"
+                                   Value="{TemplateBinding Value}"
+                                   ViewportSize="{TemplateBinding ViewportSize}"
+                                   IsDirectionReversed="False"
+                                   Margin="1,1">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageLeftCommand}"
+                                                  Background="Transparent" BorderThickness="0" Focusable="False"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb MinWidth="72" Height="14" VerticalAlignment="Center">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border x:Name="ThumbBody"
+                                                        Background="#909BA9"
+                                                        BorderBrush="#B0BAC6"
+                                                        BorderThickness="1"
+                                                        CornerRadius="6"/>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="ThumbBody" Property="Background" Value="#A1ACBA"/>
+                                                        <Setter TargetName="ThumbBody" Property="BorderBrush" Value="#BCC5D0"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsDragging" Value="True">
+                                                        <Setter TargetName="ThumbBody" Property="Background" Value="#C0C8D2"/>
+                                                        <Setter TargetName="ThumbBody" Property="BorderBrush" Value="#DEE3EA"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageRightCommand}"
+                                                  Background="Transparent" BorderThickness="0" Focusable="False"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ThumbnailItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="#292C31"/>
+            <Setter Property="BorderBrush" Value="#3C4149"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="ThumbBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ThumbBorder" Property="BorderBrush" Value="#657082"/>
+                                <Setter TargetName="ThumbBorder" Property="Background" Value="#30343A"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ThumbBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="ThumbBorder" Property="BorderThickness" Value="2"/>
+                                <Setter TargetName="ThumbBorder" Property="Background" Value="#30394D"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="54"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="154"/>
+            <RowDefinition Height="28"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Background="{StaticResource PanelBrush}"
+                BorderBrush="{StaticResource BorderBrushDark}"
+                BorderThickness="1"
+                CornerRadius="7"
+                Padding="14,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="SOGMA Panel Manager" Foreground="{StaticResource TextBrush}"
+                               FontSize="19" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <Border Margin="10,0,0,0" Padding="7,3" CornerRadius="8" Background="#2B2F35">
+                        <TextBlock Text="Fase 10.7" ToolTip="Fase 10.7 · Actualizaciones automáticas por GitHub"
+                                   Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Margin="0,0,7,0" Click="NewProject_Click" Style="{StaticResource ToolbarPrimaryButtonStyle}" ToolTip="Crear un proyecto nuevo">
+                        <StackPanel Orientation="Horizontal"><TextBlock Text="＋" FontSize="16" Margin="0,-1,5,0"/><TextBlock Text="Nuevo"/></StackPanel>
+                    </Button>
+                    <Button Margin="0,0,7,0" Click="OpenFolder_Click" Style="{StaticResource CompactButtonStyle}" ToolTip="Abrir una carpeta con paneles">
+                        <StackPanel Orientation="Horizontal"><TextBlock Text="▣" FontSize="13" Margin="0,0,5,0"/><TextBlock Text="Carpeta"/></StackPanel>
+                    </Button>
+                    <Button Margin="0,0,7,0" Click="OpenProject_Click" Style="{StaticResource CompactButtonStyle}" ToolTip="Abrir un proyecto SOGMA">
+                        <StackPanel Orientation="Horizontal"><TextBlock Text="◇" FontSize="14" Margin="0,0,5,0"/><TextBlock Text="Proyecto"/></StackPanel>
+                    </Button>
+                    <Button Margin="0,0,7,0" Click="CheckUpdates_Click" Style="{StaticResource CompactButtonStyle}" ToolTip="Buscar actualizaciones en GitHub">
+                        <StackPanel Orientation="Horizontal"><TextBlock Text="↻" FontSize="15" Margin="0,-1,5,0"/><TextBlock x:Name="UpdateButtonText" Text="Actualizar"/></StackPanel>
+                    </Button>
+                    <Button Click="SaveProject_Click" Style="{StaticResource ToolbarPrimaryButtonStyle}" ToolTip="Guardar proyecto">
+                        <StackPanel Orientation="Horizontal"><TextBlock Text="↓" FontSize="15" Margin="0,-1,5,0"/><TextBlock Text="Guardar"/></StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="0,12,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="285"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource BorderBrushDark}"
+                    BorderThickness="1"
+                    CornerRadius="7"
+                    Padding="16">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="Origen / proyecto"
+                                   Foreground="{StaticResource TextBrush}"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock x:Name="FolderPathText"
+                                   Text="Ninguna carpeta seleccionada"
+                                   Margin="0,8,0,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   FontSize="12"/>
+
+                        <Separator Margin="0,16" Background="#3A3A3A"/>
+
+                        <TextBlock Text="Panel seleccionado"
+                                   Foreground="{StaticResource TextBrush}"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock x:Name="SelectedFileText"

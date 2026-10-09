@@ -23,12 +23,12 @@ jobs:
           $src = "src/SOGMAPanelManager"
           $chunks = Join-Path $src "_chunks"
 
-          $xamlParts = Get-ChildItem "$chunks/MainWindow.xaml.*.part" | Sort-Object Name
+          $xamlParts = Get-ChildItem "$chunks/MainWindow.xaml.[0-9][0-9][0-9].part" | Sort-Object Name
           if (-not $xamlParts) { throw "No se encontraron chunks de MainWindow.xaml" }
           $xaml = ($xamlParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ""
           [System.IO.File]::WriteAllText((Join-Path $src "MainWindow.xaml"), $xaml, [System.Text.UTF8Encoding]::new($false))
 
-          $csParts = Get-ChildItem "$chunks/MainWindow.xaml.cs.*.part" | Sort-Object Name
+          $csParts = Get-ChildItem "$chunks/MainWindow.xaml.cs.[0-9][0-9][0-9].part" | Sort-Object Name
           if (-not $csParts) { throw "No se encontraron chunks de MainWindow.xaml.cs" }
           $cs = ($csParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ""
           [System.IO.File]::WriteAllText((Join-Path $src "MainWindow.xaml.cs"), $cs, [System.Text.UTF8Encoding]::new($false))

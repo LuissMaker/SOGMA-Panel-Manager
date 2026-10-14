@@ -142,6 +142,7 @@
                     <Button Margin="0,0,7,0" Click="OpenFolder_Click" Style="{StaticResource CompactButtonStyle}" ToolTip="Abrir una carpeta con paneles">
                         <StackPanel Orientation="Horizontal"><TextBlock Text="▣" FontSize="13" Margin="0,0,5,0"/><TextBlock Text="Carpeta"/></StackPanel>
                     </Button>
+                    <Button Margin="0,0,7,0" Click="MultiProjects_Click" Style="{StaticResource CompactButtonStyle}" ToolTip="Exportar y combinar varios proyectos SOGMA"><TextBlock Text="Lotes .sogma"/></Button>
                     <Button Margin="0,0,7,0" Click="OpenProject_Click" Style="{StaticResource CompactButtonStyle}" ToolTip="Abrir un proyecto SOGMA">
                         <StackPanel Orientation="Horizontal"><TextBlock Text="◇" FontSize="14" Margin="0,0,5,0"/><TextBlock Text="Proyecto"/></StackPanel>
                     </Button>

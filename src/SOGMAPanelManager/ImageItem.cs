@@ -21,6 +21,7 @@ public sealed class ImageItem : INotifyPropertyChanged
     }
 
     public List<PanelEditRegion> EditRegions { get; } = new();
+    public string ChapterName { get; set; } = "";
 
     public string PremiereNote
     {

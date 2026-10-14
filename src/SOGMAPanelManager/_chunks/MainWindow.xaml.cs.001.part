@@ -198,6 +198,7 @@
 
                 entry.ExtractToFile(outputPath, overwrite: true);
                 TryAddImage(outputPath, image.Scale, image.IsAdjusted, image.LastModifiedUtc, image.PremiereNote, image.EditRegions);
+                if (_items.Count > 0) _items[_items.Count - 1].ChapterName = image.ChapterName;
             }
 
             _temporaryProjectFolder = extractionFolder;

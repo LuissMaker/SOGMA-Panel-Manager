@@ -35,7 +35,7 @@ public partial class MainWindow
         }
         Button Btn(string title, Action act)
         {
-            var b = new Button { Content=title, Margin=new Thickness(0,0,8,8), Padding=new Thickness(12,7) };
+            var b = new Button { Content=title, Margin=new Thickness(0,0,8,8), Padding=new Thickness(12,7,12,7) };
             b.Click += (_,_) => act(); commands.Children.Add(b); return b;
         }
         Btn("+ Agregar .sogma", () => {

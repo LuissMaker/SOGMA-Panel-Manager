@@ -25,6 +25,7 @@ public sealed class SogmaProjectImage
 {
     public string FileName { get; set; } = "";
     public string ArchivePath { get; set; } = "";
+    public string ChapterName { get; set; } = "";
     public double Scale { get; set; } = 1.0;
     public bool IsAdjusted { get; set; }
     public DateTime LastModifiedUtc { get; set; } = DateTime.UtcNow;

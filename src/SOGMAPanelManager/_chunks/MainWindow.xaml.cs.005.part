@@ -36,7 +36,7 @@
         return null;
     }
 
-    private void ThumbnailList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    private void ThumbnailList_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
         var container = ItemsControl.ContainerFromElement(ThumbnailList, e.OriginalSource as DependencyObject) as ListBoxItem;
         if (container is null) return;

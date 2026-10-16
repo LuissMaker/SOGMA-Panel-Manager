@@ -100,7 +100,7 @@
                              Background="Transparent"
                              BorderThickness="0"
                              SelectionChanged="ThumbnailList_SelectionChanged"
-                             PreviewMouseLeftButtonUp="ThumbnailList_PreviewMouseLeftButtonUp"
+                             PreviewMouseRightButtonUp="ThumbnailList_PreviewMouseRightButtonUp"
                              ItemContainerStyle="{StaticResource ThumbnailItemStyle}">
                         <!-- El ListBox no crea un ScrollViewer propio. El desplazamiento pertenece al contenedor exterior. -->
                         <ListBox.Template>

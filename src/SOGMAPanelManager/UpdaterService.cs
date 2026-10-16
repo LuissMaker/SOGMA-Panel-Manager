@@ -17,7 +17,7 @@ internal sealed class SogmaUpdateInfo
 internal static class UpdaterService
 {
     public const string Repository = "LuissMaker/SOGMA-Panel-Manager";
-    public static readonly Version CurrentVersion = new(1, 0, 8);
+    public static readonly Version CurrentVersion = typeof(UpdaterService).Assembly.GetName().Version ?? new Version(1, 0, 8);
 
     private const string ExpectedAssetPrefix = "SOGMA-Panel-Manager-v";
     private static readonly HttpClient Http = CreateClient();
@@ -170,11 +170,15 @@ internal static class UpdaterService
         string exePath = Path.Combine(installPath, "SOGMA Panel Manager.exe");
         int pid = Environment.ProcessId;
         string scriptPath = Path.Combine(Path.GetTempPath(), "SOGMA_Updater_" + Guid.NewGuid().ToString("N") + ".cmd");
+        string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SOGMAPanelManager", "updater.log");
+        Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
 
         string script = string.Join(Environment.NewLine, new[]
         {
             "@echo off",
             "setlocal",
+            $"set \"LOG={logPath}\"",
+            "echo [%date% %time%] Inicio de actualizacion > \"%LOG%\"",
             $"set \"PID={pid}\"",
             $"set \"SOURCE={payloadPath}\"",
             $"set \"TARGET={installPath}\"",
@@ -189,14 +193,17 @@ internal static class UpdaterService
             "    )",
             ")",
             "",
-            "robocopy \"%SOURCE%\" \"%TARGET%\" /E /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >nul",
+            "robocopy \"%SOURCE%\" \"%TARGET%\" /E /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >> \"%LOG%\" 2>&1",
             "set \"RC=%ERRORLEVEL%\"",
+            "echo [%date% %time%] Resultado robocopy: %RC% >> \"%LOG%\"",
             "if %RC% GEQ 8 (",
             "    start \"\" cmd /c \"echo No se pudo instalar la actualizacion de SOGMA. Codigo robocopy: %RC% & pause\"",
             "    exit /b %RC%",
             ")",
             "",
+            "if not exist \"%APP%\" (echo Ejecutable no encontrado >> \"%LOG%\" & exit /b 10)",
             "start \"\" \"%APP%\"",
+            "echo [%date% %time%] Ejecutable iniciado >> \"%LOG%\"",
             "timeout /t 2 /nobreak >nul",
             "rmdir /s /q \"%TEMPROOT%\" 2>nul",
             "(goto) 2>nul & del \"%~f0\""
@@ -207,7 +214,7 @@ internal static class UpdaterService
         Process.Start(new ProcessStartInfo
         {
             FileName = "cmd.exe",
-            Arguments = $"/c start \"\" \"{scriptPath}\"",
+            Arguments = $"/c \"\"{scriptPath}\"\"",
             UseShellExecute = false,
             CreateNoWindow = true,
             WorkingDirectory = installPath

@@ -119,19 +119,25 @@ internal static class UpdaterService
             response.EnsureSuccessStatusCode();
 
             long? length = response.Content.Headers.ContentLength;
-            await using Stream input = await response.Content.ReadAsStreamAsync(cancellationToken);
-            await using FileStream output = new(zipPath, FileMode.Create, FileAccess.Write, FileShare.None);
-
-            byte[] buffer = new byte[128 * 1024];
-            long total = 0;
-            while (true)
+            // Close every download stream before opening the ZIP for extraction.
+            await using (Stream input = await response.Content.ReadAsStreamAsync(cancellationToken))
             {
-                int read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
-                if (read <= 0) break;
-                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-                total += read;
-                if (length is > 0)
-                    progress?.Report(Math.Clamp(total / (double)length.Value, 0, 1));
+                await using (FileStream output = new(zipPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    byte[] buffer = new byte[128 * 1024];
+                    long total = 0;
+                    while (true)
+                    {
+                        int read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
+                        if (read <= 0) break;
+                        await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                        total += read;
+                        if (length is > 0)
+                            progress?.Report(Math.Clamp(total / (double)length.Value, 0, 1));
+                    }
+
+                    await output.FlushAsync(cancellationToken);
+                }
             }
 
             progress?.Report(1);
